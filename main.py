@@ -42,7 +42,7 @@ parser.add_argument('--data_path', default = '../data')
 parser.add_argument('---workers', default=1,type=int)
 parser.add_argument('--epochs', default=3,type=int)
 parser.add_argument('--batch_size', default = 4, type=int)
-parser.add_argument('--model_name', default='GAN',type=str)
+parser.add_argument('--model_name', default='ModelUnet',type=str)
 
 def main():
     args = parser.parse_args()
