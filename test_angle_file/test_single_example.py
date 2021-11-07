@@ -8,7 +8,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
-from model import Unet_defocus, paper1_net
+from model import Unet_defocus
 import skimage.io
 import skimage.transform
 import skimage.color
@@ -27,7 +27,8 @@ import matplotlib as mpl
 from matplotlib import cm
 import scipy.io as io
 from PIL import Image
-
+from utils import *
+import time
 
 logging.getLogger().setLevel(logging.DEBUG)
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
@@ -46,7 +47,6 @@ def draw_trainloss():
     file.close()
     plt.plot(np.array(value))
     
-    
 
 def cal_certainty(prob):
     sum_prob = np.sum(prob)
@@ -58,18 +58,16 @@ def cal_certainty(prob):
         certain_pro = 0
     return certain_pro
 
-def test_one_image_512(image_1,image_2):
-    model_path = 'net_500_Unet.pt'
+def test_one_image_512():
+    model_path = 'results/GAN_20210728-204833/net_500.pt'
     classes_num = 13
     model = Unet_defocus(2,classes_num).to(device)
     model.load_state_dict(torch.load(model_path))
     # image size need to be 512
-    #img1_path = 'test_images/906_32_1.tiff'
-    #img2_path = 'test_images/906_32_2.tiff'
-    #image_1 = skimage.io.imread(img1_path)
-    #image_2 = skimage.io.imread(img2_path)
-    image_1 = np.array(image_1)
-    image_2 = np.array(image_2)
+    img1_path = 'test_images/906_32_1.tiff'
+    img2_path = 'test_images/906_32_2.tiff'
+    image_1 = skimage.io.imread(img1_path)
+    image_2 = skimage.io.imread(img2_path)
     image_1[image_1>10000] = 10000
     image_2[image_2>10000] = 10000
     img = np.dstack((image_1,image_2)).astype(np.float32)
@@ -86,23 +84,34 @@ def test_one_image_512(image_1,image_2):
         # for i in range(output.shape[2]):
         #     for j in range(output.shape[3]):
         #         cert[i,j] = cal_certainty(prob[0,:,i,j])
-    
-    prediction_img = np.zeros((512,512))
     pred = output.argmax(dim=1,keepdim=True).cpu().detach().numpy()
+    print(output.shape)
+    prediction_img = np.zeros((512,512))
     source_img = sp.ndimage.filters.gaussian_filter(image_1,[1,1],mode = 'reflect')
     for i in range(output.shape[2]):
             for j in range(output.shape[3]):
                 # background value set to 100
                 if source_img[i,j]<=300 or cal_certainty(probs[0,:,i,j])<0.3:
-                #if cal_certainty(probs[0,:,i,j])<0.3:
                     prediction_img[i,j] = 100 # meaning the pixel belongs to background
                 else:
                     #prob = probs[0,:,i,j]
                     #max_index = heapq.nlargest(3, range(len(prob)), prob.take)
                     #pred_defocus_level = sum(prob[max_index]/sum(prob[max_index])*max_index)
-                    #prediction_img[i,j] = (pred_defocus_level)/12
-                    prediction_img[i,j] = pred[0,0,i,j];
+                    prediction_img[i,j] = pred[0,0,i,j]
     return prediction_img
+    
+def pred_convert_img(pred_img):
+    img = np.zeros((pred_img.shape[0],pred_img.shape[1],3))
+    for i in range(pred_img.shape[0]):
+        for j in range(pred_img.shape[1]):
+            if pred_img[i,j] == 100:
+                continue
+            else:
+                img[i,j,:] = get_class_rgb(pred_img[i,j])
+    return img
+    
+    
+    
     
 def generate_colorbar():
     fig, ax = plt.subplots(figsize=(1, 6))
@@ -132,165 +141,227 @@ def generate_defocus_color(predict_img):
                     img[i,j,channel] = rgba[channel]
                 
     return img
-
-def test_one_image_2048(image_1,image_2):
-    
-    model_path = 'net_500_Unet.pt'
+def test_one_image_1024():
+    model_path = 'results/GAN_20210728-204833/net_500.pt'
     classes_num = 13
     model = Unet_defocus(2,classes_num).to(device)
     model.load_state_dict(torch.load(model_path))
     
-    #img1_path = "test_images/Galvoy_0.09_GalvoRoll_0_655477_-0.0088_1.tiff"
-    #img2_path = "test_images/Galvoy_0.09_GalvoRoll_0_655477_-0.0028_2.tiff"
-    #image_1 = skimage.io.imread(img1_path)
-    #image_2 = skimage.io.imread(img2_path)
-    image_1 = np.array(image_1)
-    image_2 = np.array(image_2)
+    img1_path = "test_images/961898_anglecorrection_GalvoX_0.14977_GalvoY_0.047227_GalvoRoll_-0.019153_detectionlens_-0.0043_1.tiff"
+    img2_path = "test_images/961898_anglecorrection_GalvoX_0.14977_GalvoY_0.047227_GalvoRoll_-0.019153_detectionlens_-0.0043_2.tiff"
+    start = time.time()
+    image_1 = skimage.io.imread(img1_path)
+    image_2 = skimage.io.imread(img2_path)
     image_1[image_1>10000] = 10000
     image_2[image_2>10000] = 10000
+    image_1 = image_1[1324-512:1324+512,1324-512:1324+512]
+    image_2 = image_2[1324-512:1324+512,1324-512:1324+512]
+    #image_1 = image_1[:,::-1]
+    #image_2 = image_2[:,::-1]
     img = np.dstack((image_1,image_2)).astype(np.float32)
     img = np.expand_dims(img,axis = 0)
     img = img/10000.0
     img = torch.from_numpy(img.copy()).type(torch.FloatTensor).permute(0,3,1,2)
-    
-    output = torch.zeros(1,13,img.shape[2],img.shape[3])
+    output = torch.zeros(1,13,1024,1024)
+    pred = np.zeros((1,1,10242,1024))
     with torch.no_grad():
         model.eval()
-        for i in range(img.shape[2]//512):
-            for j in range(img.shape[2]//512):
+        for i in range(1024//512):
+            for j in range(1024//512):
                 img_ = img[:,:,i*512:i*512+512,j*512:j*512+512].contiguous().to(device)
                 output[:,:,i*512:i*512+512,j*512:j*512+512] = model(img_)
+                pred[:,:,i*512:i*512+512,j*512:j*512+512] = output[:,:,i*512:i*512+512,j*512:j*512+512].argmax(dim=1,keepdim=True).cpu().detach().numpy()
                 
-            
     probs = F.softmax(output,dim=1).cpu().detach().numpy()
-    #pred = output.argmax(dim=1,keepdim=True).cpu().detach().numpy()
-    prediction_img = np.zeros((output.shape[2],output.shape[3]))
+    prediction_img = np.zeros((1024,1024))
     source_img = sp.ndimage.filters.gaussian_filter(image_1,[1,1],mode = 'reflect')
     for i in range(output.shape[2]):
             for j in range(output.shape[3]):
                 # background value set to 100
-                if source_img[i,j]<=300 or cal_certainty(probs[0,:,i,j])<0.35:
-                #if cal_certainty(probs[0,:,i,j])<0.35:
+                if source_img[i,j]<=300 or cal_certainty(probs[0,:,i,j])<0.3:
                     prediction_img[i,j] = 100 # meaning the pixel belongs to background
                 else:
-                    prob = probs[0,:,i,j]
-                    max_index = heapq.nlargest(3, range(len(prob)), prob.take)
-                    pred_defocus_level = sum(prob[max_index]/sum(prob[max_index])*max_index)
-                    pred_defocus_level = max_index[0]
-                    prediction_img[i,j] = (pred_defocus_level)/12
-    Image.fromarray(prediction_img).save('prediction_img.tif')
+                    #prob = probs[0,:,i,j]
+                    prediction_img[i,j] = pred[0,0,i,j]
+                    
+    end = time.time()
+    print(end-start)
+    return prediction_img
+def cal_certainty_fast(probs):
+    sum_probs = np.sum(probs,axis = 1)
+    normalized_probs = probs/sum_probs
+    cert_img = 1 - scipy.stats.entropy(normalized_probs,axis = 1)/np.log(13)
+    return cert_img.squeeze()
+    
+    
+def test_one_image_1024_fast():
+    model_path = 'results/GAN_20210728-204833/net_500.pt'
+    classes_num = 13
+    model = Unet_defocus(2,classes_num).to(device)
+    model.load_state_dict(torch.load(model_path))
+    
+    img1_path = "test_images_new/157613_defocuscorrection_GalvoX_0.054839_GalvoY_0.3165_GalvoRoll_0.0073971_detectionlens_0.01979_1.tiff"
+    img2_path = "test_images_new/157613_defocuscorrection_GalvoX_0.054839_GalvoY_0.3165_GalvoRoll_0.0073971_detectionlens_0.01979_2.tiff"
+    start = time.time()
+    image_1 = skimage.io.imread(img1_path)
+    image_2 = skimage.io.imread(img2_path)
+    image_1[image_1>10000] = 10000
+    image_2[image_2>10000] = 10000
+    image_1 = image_1[1024-512:1024+512,1024-512:1024+512]
+    image_2 = image_2[1024-512:1024+512,1024-512:1024+512]
+    #image_1 = image_1[:,::-1]
+    #image_2 = image_2[:,::-1]
+    img = np.dstack((image_1,image_2)).astype(np.float32)
+    img = np.expand_dims(img,axis = 0)
+    img = img/10000.0
+    img = torch.from_numpy(img.copy()).type(torch.FloatTensor).permute(0,3,1,2)
+    output = torch.zeros(1,13,1024,1024)
+    pred = np.zeros((1,1,1024,1024))
+    with torch.no_grad():
+        model.eval()
+        for i in range(1024//512):
+            for j in range(1024//512):
+                img_ = img[:,:,i*512:i*512+512,j*512:j*512+512].contiguous().to(device)
+                output[:,:,i*512:i*512+512,j*512:j*512+512] = model(img_)
+                pred[:,:,i*512:i*512+512,j*512:j*512+512] = output[:,:,i*512:i*512+512,j*512:j*512+512].argmax(dim=1,keepdim=True).cpu().detach().numpy()
+    
+    probs = F.softmax(output,dim=1).cpu().detach().numpy()
+    prediction_img = np.zeros((1024,1024))
+    prediction_img = pred[0,0,:,:]
+    source_img = sp.ndimage.filters.gaussian_filter(image_1,[1,1],mode = 'reflect')
+    cert_img = cal_certainty_fast(probs)
+    print(cert_img.squeeze().shape)
+    print(source_img.shape)
+    print(cert_img.shape)
+    prediction_img[source_img<=300] = 100
+    prediction_img[cert_img<=0.3] = 100
+    # for i in range(output.shape[2]):
+    #         for j in range(output.shape[3]):
+    #             # background value set to 100
+    #             if source_img[i,j]<=300 or cal_certainty(probs[0,:,i,j])<0.3:
+    #                 prediction_img[i,j] = 100 # meaning the pixel belongs to background
+    #             else:
+    #                 #prob = probs[0,:,i,j]
+    #                 prediction_img[i,j] = pred[0,0,i,j]
+                    
+    end = time.time()
+    print(end-start)
     return prediction_img
 
-def img_to_batches(img):
-    height = img.shape[2]
-    width = img.shape[3]
-    image_size = 128
-    num = (height/128)*(width/128)
-    image_batches = np.zeros((int(num),2,image_size,image_size))
-    height_num = int(height/image_size)
-    width_num = int(width/image_size)
-    for i in range(height_num):
-        for j in range(width_num):
-            image_batches[i*width_num+j,:,:,:] = img[0,:,i*image_size:i*image_size+image_size,j*image_size:j*image_size+image_size]
-    return image_batches
-
-
-def cal_certainty(prob):
-    sum_prob = np.sum(prob)
-    num_classes = prob.shape[0]
+def test_one_image_512_fast():
+    model_path = 'results/GAN_20210728-204833/net_500.pt'
+    classes_num = 13
+    model = Unet_defocus(2,classes_num).to(device)
+    model.load_state_dict(torch.load(model_path))
     
-    if sum_prob > 0:
-        normalized_prob = prob/sum_prob
-        certain_proxy = 1.0 - scipy.stats.entropy(normalized_prob)/np.log(num_classes)
-    else:
-        certain_proxy = 0.0
-    certain_proxy = np.clip(certain_proxy,0.0,1.0)
-    #print(certain_proxy)
-    return certain_proxy
-
-def get_certainty(prob):
-    num_batches = prob.shape[0]
-    #num_classes = prob.shape[1]
-    cert = np.zeros(num_batches)
-    for i in range(num_batches):
-        cert[i] = cal_certainty(prob[i])
+    img1_path = "test_images/961898_original_GalvoX_0.18516_GalvoY_-0.053165_GalvoRoll_-0.034161_detectionlens_-0.0044_1.tiff"
+    img2_path = "test_images/961898_original_GalvoX_0.18516_GalvoY_-0.053165_GalvoRoll_-0.034161_detectionlens_-0.0044_2.tiff"
+    start = time.time()
+    image_1 = skimage.io.imread(img1_path)
+    image_2 = skimage.io.imread(img2_path)
+    image_1[image_1>10000] = 10000
+    image_2[image_2>10000] = 10000
+    image_1 = image_1[1260-256:1260+256,1260-256:1260+256]
+    image_2 = image_2[1260-256:1260+256,1260-256:1260+256]
+    img = np.dstack((image_1,image_2)).astype(np.float32)
+    img = np.expand_dims(img,axis = 0)
+    img = img/10000.0
+    img = torch.from_numpy(img.copy()).type(torch.FloatTensor).permute(0,3,1,2)
+    output = torch.zeros(1,13,1024,1024)
+    pred = np.zeros((1,1,1024,1024))
+    with torch.no_grad():
+        model.eval()
+        img_ = img.contiguous().to(device)
+        output = model(img_)
+        pred = output.argmax(dim=1,keepdim=True).cpu().detach().numpy()
         
-    return cert
+    
+    probs = F.softmax(output,dim=1).cpu().detach().numpy()
+    prediction_img = np.zeros((512,512))
+    prediction_img = pred[0,0,:,:]
+    source_img = sp.ndimage.filters.gaussian_filter(image_1,[1,1],mode = 'reflect')
+    cert_img = cal_certainty_fast(probs)
+    print(cert_img.squeeze().shape)
+    print(source_img.shape)
+    print(cert_img.shape)
+    prediction_img[source_img<=300] = 100
+    prediction_img[cert_img<=0.3] = 100
+    # for i in range(output.shape[2]):
+    #         for j in range(output.shape[3]):
+    #             # background value set to 100
+    #             if source_img[i,j]<=300 or cal_certainty(probs[0,:,i,j])<0.3:
+    #                 prediction_img[i,j] = 100 # meaning the pixel belongs to background
+    #             else:
+    #                 #prob = probs[0,:,i,j]
+    #                 prediction_img[i,j] = pred[0,0,i,j]
+                    
+    end = time.time()
+    print(end-start)
+    return prediction_img
 
-def test_one_image_2048_paper1(image_1,image_2):
-    model_path = 'selfmade_net_6nm_20000_paper1.pt'
-    classifier = paper1_net().to(device)
-    classifier.load_state_dict(torch.load(model_path))
-    image_1 = np.array(image_1)
-    image_2 = np.array(image_2)
+
+
+def test_one_image_2048():
+    
+    model_path = 'results/GAN_20210728-204833/net_500.pt'
+    classes_num = 13
+    model = Unet_defocus(2,classes_num).to(device)
+    model.load_state_dict(torch.load(model_path))
+    
+    img1_path = "test_images/157613_defocuscorrection_GalvoX_0.054839_GalvoY_0.3165_GalvoRoll_0.0073971_detectionlens_0.01979_1.tiff"
+    img2_path = "test_images/157613_defocuscorrection_GalvoX_0.054839_GalvoY_0.3165_GalvoRoll_0.0073971_detectionlens_0.01979_2.tiff"
+    image_1 = skimage.io.imread(img1_path)
+    image_2 = skimage.io.imread(img2_path)
     image_1[image_1>10000] = 10000
     image_2[image_2>10000] = 10000
     img = np.dstack((image_1,image_2)).astype(np.float32)
     img = np.expand_dims(img,axis = 0)
     img = img/10000.0
     img = torch.from_numpy(img.copy()).type(torch.FloatTensor).permute(0,3,1,2)
-    img_batches = img_to_batches(img)
     
+    output = torch.zeros(1,13,2048,2048)
+    pred = np.zeros((1,1,2048,2048))
     with torch.no_grad():
-        classifier.eval()
-        output = classifier(torch.from_numpy(img_batches.copy()).type(torch.FloatTensor).to(device))
+        model.eval()
+        for i in range(2048//512):
+            for j in range(2048//512):
+                img_ = img[:,:,i*512:i*512+512,j*512:j*512+512].contiguous().to(device)
+                output[:,:,i*512:i*512+512,j*512:j*512+512] = model(img_)
+                pred[:,:,i*512:i*512+512,j*512:j*512+512] = output[:,:,i*512:i*512+512,j*512:j*512+512].argmax(dim=1,keepdim=True).cpu().detach().numpy()
+            
+    probs = F.softmax(output,dim=1).cpu().detach().numpy()
+    prediction_img = np.zeros((2048,2048))
+    source_img = sp.ndimage.filters.gaussian_filter(image_1,[1,1],mode = 'reflect')
+    for i in range(output.shape[2]):
+            for j in range(output.shape[3]):
+                # background value set to 100
+                if source_img[i,j]<=300 or cal_certainty(probs[0,:,i,j])<0.3:
+                    prediction_img[i,j] = 100 # meaning the pixel belongs to background
+                else:
+                    #prob = probs[0,:,i,j]
+                    prediction_img[i,j] = pred[0,0,i,j]
+                    #max_index = heapq.nlargest(3, range(len(prob)), prob.take)
+                    #pred_defocus_level = sum(prob[max_index]/sum(prob[max_index])*max_index)
+                    #prediction_img[i,j] = (pred_defocus_level)/12
+    return prediction_img
     
-    pred = output.argmax(dim=1,keepdim=True).cpu().detach().numpy()
-    
-    prob = F.softmax(output,dim=1).cpu().detach().numpy()
-    cert = get_certainty(prob)
-    return pred,cert,prob
-def test_one_image_512_paper1(image_1,image_2):
-    model_path = 'selfmade_net_6nm_20000_paper1.pt'
-    classifier = paper1_net().to(device)
-    classifier.load_state_dict(torch.load(model_path))
-    image_1 = np.array(image_1)
-    image_2 = np.array(image_2)
-    image_1[image_1>10000] = 10000
-    image_2[image_2>10000] = 10000
-    img = np.dstack((image_1,image_2)).astype(np.float32)
-    img = np.expand_dims(img,axis = 0)
-    img = img/10000.0
-    img = torch.from_numpy(img.copy()).type(torch.FloatTensor).permute(0,3,1,2)
-    img_batches = img_to_batches(img)
-    with torch.no_grad():
-        classifier.eval()
-        output = classifier(torch.from_numpy(img_batches.copy()).type(torch.FloatTensor).to(device))
-    
-    pred = output.argmax(dim=1,keepdim=True).cpu().detach().numpy()
-    prob = F.softmax(output,dim=1).cpu().detach().numpy()
-    cert = get_certainty(prob)
-    
-    return pred,cert,prob
-
-def test_one_image_128_paper1(image_1,image_2):
-    model_path = 'selfmade_net_6nm_20000_paper1.pt'
-    classifier = paper1_net().to(device)
-    classifier.load_state_dict(torch.load(model_path))
-    image_1 = np.array(image_1)
-    image_2 = np.array(image_2)
-    image_1[image_1>10000] = 10000
-    image_2[image_2>10000] = 10000
-    img = np.dstack((image_1,image_2)).astype(np.float32)
-    img = np.expand_dims(img,axis = 0)
-    img = img/10000.0
-    img = torch.from_numpy(img.copy()).type(torch.FloatTensor).permute(0,3,1,2)
-    with torch.no_grad():
-        classifier.eval()
-        output = classifier(img.type(torch.FloatTensor).to(device))
-    pred = output.argmax(dim=1,keepdim=True).cpu().detach().numpy()
-    prob = F.softmax(output,dim=1).cpu().detach().numpy()
-    cert = get_certainty(prob)
-    return pred,cert
-
-
+        
+        
 if __name__ == "__main__":
     
     # pred_img = test_one_image_512()
+    # img_defocus = pred_convert_img(pred_img)
+    # plt.imsave('defocus_img.tiff',img_defocus)
     # img_defocus = generate_defocus_color(pred_img)
     # plt.imsave('defocus_img.tiff',img_defocus)
-    pred_img = test_one_image_2048()
-    img_defocus = generate_defocus_color(pred_img)
+    # pred_img = test_one_image_2048()
+    # img_defocus = generate_defocus_color(pred_img)
+    # plt.imsave('defocus_img.tiff',img_defocus)
+    # Image.fromarray(pred_img).save('pred_img.tif')
+    pred_img = test_one_image_1024_fast()
+    img_defocus = pred_convert_img(pred_img)
     plt.imsave('defocus_img.tiff',img_defocus)
-    Image.fromarray(pred_img).save('pred_img.tif')
+    
+    
+    
     
