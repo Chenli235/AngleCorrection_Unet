@@ -87,7 +87,7 @@ def main():
             loss.backward()
             optimizer.step()
             running_loss += loss.item()
-            training_loss += loss.itme()
+            training_loss += loss.item()
             if index % 20 == 19:
                 logging.info('\n Epoch: {}/{}  Loss: {}\n'.format(epoch,index+1,running_loss))
                 running_loss = 0
