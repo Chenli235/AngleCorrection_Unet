@@ -79,9 +79,9 @@ def main():
             
             imgs = data['image']
             true_masks = data['mask']
-            mask_type = torch.double
-            true_masks = true_masks.to(device=device,dtype=mask_type)
-            masks_pred = model(imgs.to(device,dtype = mask_type))
+            #mask_type = torch.double
+            true_masks = true_masks.to(device)
+            masks_pred = model(imgs.to(device))
             
             loss = criterion(masks_pred,true_masks)
             loss.backward()
