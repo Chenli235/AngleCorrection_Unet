@@ -76,8 +76,7 @@ def main():
             logging.info('\n Training Epoch:{}\n'.format(epoch))
         for index, data in enumerate(train_dataloader):
             optimizer.zero_grad()
-            if index > 0:
-                break
+            
             imgs = data['image']
             true_masks = data['mask']
             mask_type = torch.double
