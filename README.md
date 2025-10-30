@@ -13,3 +13,5 @@ if you find this work and dataset are useful for your research, please cite thes
 
 1. Li, Chen, et al. "Deep learning-based autofocus method enhances image quality in light-sheet fluorescence microscopy." Biomedical Optics Express 12.8 (2021): 5214-5226.
 2. Li, Chen, et al. "Illumination angle correction during image acquisition in light-sheet fluorescence microscopy using deep learning." Biomedical optics express 13.2 (2022): 888-901.
+3. Moatti, Adele, et al. "Three-dimensional imaging of intact porcine cochlea using tissue clearing and custom-built light-sheet microscopy." Biomedical Optics Express 11.11 (2020): 6181-6196.
+
